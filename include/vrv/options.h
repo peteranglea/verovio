@@ -467,6 +467,7 @@ public:
     OptionBool m_evenNoteSpacing;
     OptionBool m_humType;
     OptionBool m_landscape;
+    OptionBool m_mensuralToMeasure;
     OptionBool m_mmOutput;
     OptionBool m_noFooter;
     OptionBool m_noHeader;
@@ -489,6 +490,8 @@ public:
     OptionInt m_beamMinSlope;
     OptionString m_font;
     OptionDbl m_graceFactor;
+    OptionBool m_graceRhythmAlign;
+    OptionBool m_graceRightAlign;
     OptionDbl m_hairpinSize;
     OptionDbl m_leftPosition;
     OptionDbl m_lyricHyphenWidth;

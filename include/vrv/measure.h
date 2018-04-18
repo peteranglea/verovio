@@ -201,6 +201,16 @@ public:
     virtual int ConvertToPageBased(FunctorParams *functorParams);
 
     /**
+     * See Object::ConvertToCastOffMensural
+     */
+    virtual int ConvertToCastOffMensural(FunctorParams *params);
+
+    /**
+     * See Object::ConvertToUnCastOffMensural
+     */
+    virtual int ConvertToUnCastOffMensural(FunctorParams *params);
+
+    /**
      * See Object::Save
      */
     ///@{
@@ -305,9 +315,12 @@ public:
     virtual int PrepareCrossStaff(FunctorParams *functorParams);
 
     /**
-     * See Object::PrepareFloatingGrps
+     * @name See Object::PrepareFloatingGrps
      */
+    ///@{
     virtual int PrepareFloatingGrps(FunctorParams *functoParams);
+    virtual int PrepareFloatingGrpsEnd(FunctorParams *functoParams);
+    ///@}
 
     /**
      * See Object::PrepareTimePointingEnd

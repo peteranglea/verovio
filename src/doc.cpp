@@ -136,7 +136,7 @@ bool Doc::GenerateDocumentScoreDef()
 
     ArrayOfObjects staves;
     AttComparison matchType(STAFF);
-    measure->FindAllChildByAttComparison(&staves, &matchType);
+    measure->FindAllChildByComparison(&staves, &matchType);
 
     if (staves.empty()) {
         LogError("No staff found for generating a scoreDef");
@@ -203,7 +203,7 @@ bool Doc::GenerateMeasureNumbers()
     AttComparison matchType(MEASURE);
     ArrayOfObjects measures;
     ArrayOfObjects::iterator measureIter;
-    this->FindAllChildByAttComparison(&measures, &matchType);
+    this->FindAllChildByComparison(&measures, &matchType);
 
     // run through all measures and generate missing mNum from attribute
     for (measureIter = measures.begin(); measureIter != measures.end(); ++measureIter) {
@@ -267,7 +267,7 @@ void Doc::CalculateMidiTimemap()
     m_hasMidiTimemap = true;
 }
 
-void Doc::ExportMIDI(MidiFile *midiFile)
+void Doc::ExportMIDI(smf::MidiFile *midiFile)
 {
 
     if (!Doc::HasMidiTimemap()) {
@@ -307,7 +307,7 @@ void Doc::ExportMIDI(MidiFile *midiFile)
     // track 0 (included by default) is reserved for meta messages common to all tracks
     int midiChannel = 0;
     int midiTrack = 1;
-    std::vector<AttComparison *> filters;
+    ArrayOfComparisons filters;
     for (staves = prepareProcessingListsParams.m_layerTree.child.begin();
          staves != prepareProcessingListsParams.m_layerTree.child.end(); ++staves) {
 
@@ -325,9 +325,9 @@ void Doc::ExportMIDI(MidiFile *midiFile)
                 instrdef = dynamic_cast<InstrDef *>(staffGrp->FindChildByType(INSTRDEF, 1));
             }
             if (instrdef) {
-                if (instrdef->HasMidiChannel()) midiChannel = instrdef->GetMidiChannel() - 1;
+                if (instrdef->HasMidiChannel()) midiChannel = instrdef->GetMidiChannel();
                 if (instrdef->HasMidiInstrnum())
-                    midiFile->addPatchChange(midiTrack, 0, midiChannel, instrdef->GetMidiInstrnum() - 1);
+                    midiFile->addPatchChange(midiTrack, 0, midiChannel, instrdef->GetMidiInstrnum());
             }
             // set MIDI track name
             Label *label = dynamic_cast<Label *>(staffDef->FindChildByType(LABEL, 1));
@@ -342,7 +342,8 @@ void Doc::ExportMIDI(MidiFile *midiFile)
             }
             // set MIDI time signature
             if (this->m_scoreDef.HasMeterCount()) {
-                midiFile->addTimeSignature(midiTrack, 0, this->m_scoreDef.GetMeterCount(), this->m_scoreDef.GetMeterUnit());
+                midiFile->addTimeSignature(
+                    midiTrack, 0, this->m_scoreDef.GetMeterCount(), this->m_scoreDef.GetMeterUnit());
             }
         }
 
@@ -367,7 +368,7 @@ void Doc::ExportMIDI(MidiFile *midiFile)
     }
 }
 
-bool Doc::ExportTimemap(string &output)
+bool Doc::ExportTimemap(std::string &output)
 {
     if (!Doc::HasMidiTimemap()) {
         // generate MIDI timemap before progressing
@@ -389,8 +390,8 @@ bool Doc::ExportTimemap(string &output)
 }
 
 void Doc::PrepareJsonTimemap(std::string &output, std::map<int, double> &realTimeToScoreTime,
-    std::map<int, vector<string> > &realTimeToOnElements, std::map<int, vector<string> > &realTimeToOffElements,
-    std::map<int, int> &realTimeToTempo)
+    std::map<int, std::vector<std::string> > &realTimeToOnElements,
+    std::map<int, std::vector<std::string> > &realTimeToOffElements, std::map<int, int> &realTimeToTempo)
 {
 
     int currentTempo = -1000;
@@ -404,10 +405,10 @@ void Doc::PrepareJsonTimemap(std::string &output, std::map<int, double> &realTim
     for (auto it = realTimeToScoreTime.begin(); it != realTimeToScoreTime.end(); ++it) {
         output += "\t{\n";
         output += "\t\t\"tstamp\":\t";
-        output += to_string(it->first);
+        output += std::to_string(it->first);
         output += ",\n";
         output += "\t\t\"qstamp\":\t";
-        output += to_string(it->second);
+        output += std::to_string(it->second);
 
         auto ittempo = realTimeToTempo.find(it->first);
         if (ittempo != realTimeToTempo.end()) {
@@ -415,7 +416,7 @@ void Doc::PrepareJsonTimemap(std::string &output, std::map<int, double> &realTim
             if (newTempo != currentTempo) {
                 currentTempo = newTempo;
                 output += ",\n\t\t\"tempo\":\t";
-                output += to_string(currentTempo);
+                output += std::to_string(currentTempo);
             }
         }
 
@@ -559,7 +560,7 @@ void Doc::PrepareDrawing()
 
     /************ Resolve some pointers by layer ************/
 
-    std::vector<AttComparison *> filters;
+    ArrayOfComparisons filters;
     for (staves = prepareProcessingListsParams.m_layerTree.child.begin();
          staves != prepareProcessingListsParams.m_layerTree.child.end(); ++staves) {
         for (layers = staves->second.child.begin(); layers != staves->second.child.end(); ++layers) {
@@ -743,7 +744,7 @@ void Doc::CastOffDoc()
 
     System *currentSystem = new System();
     contentPage->AddChild(currentSystem);
-    CastOffSystemsParams castOffSystemsParams(contentSystem, contentPage, currentSystem);
+    CastOffSystemsParams castOffSystemsParams(contentSystem, contentPage, currentSystem, this);
     castOffSystemsParams.m_systemWidth = this->m_drawingPageWidth - this->m_drawingPageMarginLeft
         - this->m_drawingPageMarginRight - currentSystem->m_systemLeftMar - currentSystem->m_systemRightMar;
     castOffSystemsParams.m_shift = -contentSystem->GetDrawingLabelsWidth();
@@ -986,7 +987,7 @@ void Doc::ConvertToUnCastOffMensuralDoc()
 
     ConvertToUnCastOffMensuralParams convertToUnCastOffMensuralParams;
 
-    std::vector<AttComparison *> filters;
+    ArrayOfComparisons filters;
     // Now we can process by layer and move their content to (measure) segments
     for (auto const &staves : prepareProcessingListsParams.m_layerTree.child) {
         for (auto const &layers : staves.second.child) {
@@ -1046,7 +1047,7 @@ void Doc::ConvertAnalyticalMarkupDoc(bool permanent)
 
     // Process by layer for matching @tie attribute - we process notes and chords, looking at
     // GetTie values and pitch and oct for matching notes
-    std::vector<AttComparison *> filters;
+    ArrayOfComparisons filters;
     for (staves = prepareProcessingListsParams.m_layerTree.child.begin();
          staves != prepareProcessingListsParams.m_layerTree.child.end(); ++staves) {
         for (layers = staves->second.child.begin(); layers != staves->second.child.end(); ++layers) {

@@ -172,7 +172,7 @@ void MusicXmlInput::AddMeasure(Section *section, Measure *measure, int i)
     // otherwise copy the content to the corresponding existing measure
     else if (section->GetChildCount(MEASURE) > i) {
         AttNNumberLikeComparison comparisonMeasure(MEASURE, measure->GetN());
-        Measure *existingMeasure = dynamic_cast<Measure *>(section->FindChildByAttComparison(&comparisonMeasure, 1));
+        Measure *existingMeasure = dynamic_cast<Measure *>(section->FindChildByComparison(&comparisonMeasure, 1));
         assert(existingMeasure);
         Object *current;
         for (current = measure->GetFirst(); current; current = measure->GetNext()) {
@@ -248,7 +248,7 @@ Layer *MusicXmlInput::SelectLayer(int layerNum, Staff *staff)
     }
     else {
         AttNIntegerComparison comparisonLayer(LAYER, layerNum);
-        layer = dynamic_cast<Layer *>(staff->FindChildByAttComparison(&comparisonLayer, 1));
+        layer = dynamic_cast<Layer *>(staff->FindChildByComparison(&comparisonLayer, 1));
     }
     if (layer) return layer;
     // else add it
@@ -413,16 +413,23 @@ bool MusicXmlInput::ReadMusicXml(pugi::xml_node root)
 
     ReadMusicXmlTitle(root);
 
-    // The mdiv
+    // the mdiv
     Mdiv *mdiv = new Mdiv();
     mdiv->m_visibility = Visible;
     m_doc->AddChild(mdiv);
-    // The score
+    // the score
     Score *score = new Score();
     mdiv->AddChild(score);
     // the section
     Section *section = new Section();
     score->AddChild(section);
+    // initialize layout
+    if (root.select_single_node("/score-partwise/identification/encoding/supports[@element='print']")) {
+        m_hasLayoutInformation = true;
+        // always start with a new page
+        Pb *pb = new Pb();
+        section->AddChild(pb);
+    }
 
     std::vector<StaffGrp *> m_staffGrpStack;
     StaffGrp *staffGrp = new StaffGrp();
@@ -478,7 +485,7 @@ bool MusicXmlInput::ReadMusicXml(pugi::xml_node root)
             pugi::xpath_node midiInstrument = xpathNode.node().select_single_node("midi-instrument");
             pugi::xpath_node midiChannel = midiInstrument.node().select_single_node("midi-channel");
             pugi::xpath_node midiName = midiInstrument.node().select_single_node("midi-name");
-            pugi::xpath_node midiPan = midiInstrument.node().select_single_node("pan");
+            // pugi::xpath_node midiPan = midiInstrument.node().select_single_node("pan");
             pugi::xpath_node midiProgram = midiInstrument.node().select_single_node("midi-program");
             pugi::xpath_node midiVolume = midiInstrument.node().select_single_node("volume");
             // create the staffDef(s)
@@ -502,10 +509,11 @@ bool MusicXmlInput::ReadMusicXml(pugi::xml_node root)
                 }
                 if (midiInstrument) {
                     InstrDef *instrdef = new InstrDef;
-                    instrdef->SetMidiInstrname(instrdef->AttMidiInstrument::StrToMidinames(midiName.node().text().as_string()));
-                    if (midiChannel) instrdef->SetMidiChannel(midiChannel.node().text().as_int());
-                    if (midiPan) instrdef->SetMidiPan(midiPan.node().text().as_int());
-                    if (midiProgram) instrdef->SetMidiInstrnum(midiProgram.node().text().as_int());
+                    instrdef->SetMidiInstrname(
+                        instrdef->AttMidiInstrument::StrToMidinames(midiName.node().text().as_string()));
+                    if (midiChannel) instrdef->SetMidiChannel(midiChannel.node().text().as_int() - 1);
+                    // if (midiPan) instrdef->SetMidiPan(midiPan.node().text().as_int());
+                    if (midiProgram) instrdef->SetMidiInstrnum(midiProgram.node().text().as_int() - 1);
                     if (midiVolume) instrdef->SetMidiVolume(midiVolume.node().text().as_int());
                     partStaffGrp->AddChild(instrdef);
                 }
@@ -532,10 +540,10 @@ bool MusicXmlInput::ReadMusicXml(pugi::xml_node root)
                     }
                     if (midiInstrument) {
                         InstrDef *instrdef = new InstrDef;
-                        if (midiChannel) instrdef->SetMidiChannel(midiChannel.node().text().as_int());
-                        if (midiProgram) instrdef->SetMidiInstrnum(midiProgram.node().text().as_int());
+                        if (midiChannel) instrdef->SetMidiChannel(midiChannel.node().text().as_int() - 1);
+                        // if (midiPan) instrdef->SetMidiPan(midiPan.node().text().as_int());
+                        if (midiProgram) instrdef->SetMidiInstrnum(midiProgram.node().text().as_int() - 1);
                         if (midiVolume) instrdef->SetMidiVolume(midiVolume.node().text().as_int());
-                        if (midiPan) instrdef->SetMidiPan(midiPan.node().text().as_int());
                         staffDef->AddChild(instrdef);
                     }
                 }
@@ -564,7 +572,7 @@ bool MusicXmlInput::ReadMusicXml(pugi::xml_node root)
     for (iter = m_controlElements.begin(); iter != m_controlElements.end(); ++iter) {
         if (!measure || (measure->GetN() != iter->first)) {
             AttNNumberLikeComparison comparisonMeasure(MEASURE, iter->first);
-            measure = dynamic_cast<Measure *>(section->FindChildByAttComparison(&comparisonMeasure, 1));
+            measure = dynamic_cast<Measure *>(section->FindChildByComparison(&comparisonMeasure, 1));
         }
         if (!measure) {
             LogWarning("Element '%s' could not be added to measure '%s'", iter->second->GetClassName().c_str(),
@@ -652,9 +660,8 @@ int MusicXmlInput::ReadMusicXmlPartAttributesAsStaffDef(pugi::xml_node node, Sta
         // Create as many staffDef
         for (i = 0; i < nbStaves; i++) {
             // Find or create the staffDef
-            StaffDef *staffDef = NULL;
             AttNIntegerComparison comparisonStaffDef(STAFFDEF, i + 1 + staffOffset);
-            staffDef = dynamic_cast<StaffDef *>(staffGrp->FindChildByAttComparison(&comparisonStaffDef, 1));
+            StaffDef *staffDef = dynamic_cast<StaffDef *>(staffGrp->FindChildByComparison(&comparisonStaffDef, 1));
             if (!staffDef) {
                 staffDef = new StaffDef();
                 staffDef->SetN(i + 1 + staffOffset);

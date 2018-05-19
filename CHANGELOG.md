@@ -2,7 +2,17 @@
 
 ## [Unreleased]
 ### Added
-* Support for `mnum.visible` on `<scoredef>` (@rettinghaus)
+* Barline segmentation with text and dynamic indications overlapping measures
+* Improved layout with text (dir, tempo, etc.) at the end of a system
+* Support for dashed bar lines
+* Improvement of MIDI output for mensural notation
+* Support for `@stem.visible` on `<note>` and `<chord>`
+* Fix for Plaine & Easie chords and ties
+* Fix for Plaine & Easie dots in mensural notation
+* Support for MIDI playback of `<beatRpt>`
+* Additional options for controlling grace notes alignment
+* Support for `<instrDef>` (@rettinghaus)
+* Support for `mnum.visible` on `<scoreDef>` (@rettinghaus)
 * Implementation of `<mNum>` and generation from `measure@n` if necessary (@rettinghaus)
 * Support for mulitple lines or `<harm>` according to `@n` value
 * Adjustment of `<hairpin>` length with surrounding `<dynam>` or `<hairpin>`

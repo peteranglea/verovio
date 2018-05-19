@@ -36,6 +36,7 @@
 #include "mrpt2.h"
 #include "multirest.h"
 #include "multirpt.h"
+#include "neume.h"
 #include "note.h"
 #include "page.h"
 #include "rest.h"
@@ -135,7 +136,7 @@ bool LayerElement::IsGraceNote()
     else if (this->Is(TUPLET)) {
         AttComparisonAny matchType({ NOTE, CHORD });
         ArrayOfObjects children;
-        LayerElement *child = dynamic_cast<LayerElement *>(this->FindChildByAttComparison(&matchType));
+        LayerElement *child = dynamic_cast<LayerElement *>(this->FindChildByComparison(&matchType));
         if (child) return child->IsGraceNote();
     }
     // For accid, artic, etc.. look at the parent note / chord
@@ -420,7 +421,7 @@ int LayerElement::GetDrawingRadius(Doc *doc)
     if (!this->Is({ CHORD, NOTE, REST })) return 0;
 
     wchar_t code = 0;
-    
+
     int dur = DUR_4;
     if (this->Is(NOTE)) {
         Note *note = dynamic_cast<Note *>(this);
@@ -429,7 +430,6 @@ int LayerElement::GetDrawingRadius(Doc *doc)
         if (note->IsMensural()) {
             code = note->GetMensuralSmuflNoteHead();
         }
-        
     }
     else if (this->Is(CHORD)) {
         Chord *chord = dynamic_cast<Chord *>(this);
@@ -452,7 +452,7 @@ int LayerElement::GetDrawingRadius(Doc *doc)
         }
     }
     else if (dur == DUR_1) {
-         return doc->GetGlyphWidth(SMUFL_E0A2_noteheadWhole, staff->m_drawingStaffSize, this->GetDrawingCueSize()) / 2;
+        return doc->GetGlyphWidth(SMUFL_E0A2_noteheadWhole, staff->m_drawingStaffSize, this->GetDrawingCueSize()) / 2;
     }
     else if (dur == DUR_2) {
         return doc->GetGlyphWidth(SMUFL_E0A3_noteheadHalf, staff->m_drawingStaffSize, this->GetDrawingCueSize()) / 2;
@@ -484,6 +484,15 @@ double LayerElement::GetAlignmentDuration(
         assert(duration);
         if (duration->IsMensural() && (notationType != NOTATIONTYPE_cmn)) {
             return duration->GetInterfaceAlignmentMensuralDuration(num, numbase, mensur);
+        }
+        if (this->Is(NC)) {
+            Neume *neume = dynamic_cast<Neume *>(this->GetFirstParent(NEUME));
+            if (neume->IsLastInNeume(this)) {
+                return 128;
+            }
+            else {
+                return 16;
+            }
         }
         double durationValue = duration->GetInterfaceAlignmentDuration(num, numbase);
         // With fTrem we need to divide the duration by two
@@ -659,11 +668,24 @@ int LayerElement::AlignHorizontally(FunctorParams *functorParams)
         // accid within note was already taken into account by noteParent
         type = ALIGNMENT_ACCID;
     }
-    else if (this->Is({ ARTIC, ARTIC_PART, SYL })) {
+    else if (this->Is({ ARTIC, ARTIC_PART })) {
         // Refer to the note parent
         Note *note = dynamic_cast<Note *>(this->GetFirstParent(NOTE));
         assert(note);
         m_alignment = note->GetAlignment();
+    }
+    else if (this->Is(SYL)) {
+        Staff *staff = dynamic_cast<Staff *>(this->GetFirstParent(STAFF));
+        assert(staff);
+
+        if (staff->m_drawingNotationType == NOTATIONTYPE_neume) {
+            type = ALIGNMENT_DEFAULT;
+        }
+        else {
+            Note *note = dynamic_cast<Note *>(this->GetFirstParent(NOTE));
+            assert(note);
+            m_alignment = note->GetAlignment();
+        }
     }
     else if (this->Is(VERSE)) {
         // Idem
@@ -929,6 +951,10 @@ int LayerElement::AdjustLayers(FunctorParams *functorParams)
                     continue;
             }
 
+            if (this->Is(DOTS) && (*iter)->Is(DOTS)) {
+                continue;
+            }
+
             // Nothing to do if we have no vertical overlap
             if (!this->VerticalSelfOverlap(*iter, verticalMargin)) continue;
 
@@ -1074,7 +1100,7 @@ int LayerElement::PrepareDrawingCueSize(FunctorParams *functorParams)
     else if (this->Is(TUPLET)) {
         AttComparisonAny matchType({ NOTE, CHORD });
         ArrayOfObjects children;
-        LayerElement *child = dynamic_cast<LayerElement *>(this->FindChildByAttComparison(&matchType));
+        LayerElement *child = dynamic_cast<LayerElement *>(this->FindChildByComparison(&matchType));
         if (child) m_drawingCueSize = child->GetDrawingCueSize();
     }
     // For accid, look at the parent if @func="edit" or otherwise to the parent note
@@ -1126,7 +1152,7 @@ int LayerElement::PrepareCrossStaff(FunctorParams *functorParams)
     params->m_currentCrossLayer = NULL;
 
     AttNIntegerComparison comparisonFirst(STAFF, durElement->GetStaff().at(0));
-    m_crossStaff = dynamic_cast<Staff *>(params->m_currentMeasure->FindChildByAttComparison(&comparisonFirst, 1));
+    m_crossStaff = dynamic_cast<Staff *>(params->m_currentMeasure->FindChildByComparison(&comparisonFirst, 1));
     if (!m_crossStaff) {
         LogWarning("Could not get the cross staff reference '%d' for element '%s'", durElement->GetStaff().at(0),
             this->GetUuid().c_str());
@@ -1150,7 +1176,7 @@ int LayerElement::PrepareCrossStaff(FunctorParams *functorParams)
     // When we will have allowed @layer in <note>, we will have to do:
     // int layerN = durElement->HasLayer() ? durElement->GetLayer() : (*currentLayer)->GetN();
     AttNIntegerComparison comparisonFirstLayer(LAYER, layerN);
-    m_crossLayer = dynamic_cast<Layer *>(m_crossStaff->FindChildByAttComparison(&comparisonFirstLayer, 1));
+    m_crossLayer = dynamic_cast<Layer *>(m_crossStaff->FindChildByComparison(&comparisonFirstLayer, 1));
     if (!m_crossLayer) {
         // Just try to pick the first one...
         m_crossLayer = dynamic_cast<Layer *>(m_crossStaff->FindChildByType(LAYER));
@@ -1271,7 +1297,9 @@ int LayerElement::CalcOnsetOffset(FunctorParams *functorParams)
     double incrementScoreTime;
 
     if (this->Is(REST) || this->Is(SPACE)) {
-        double incrementScoreTime = GetAlignmentDuration() / (DUR_MAX / DURATION_4);
+        incrementScoreTime = this->GetAlignmentDuration(
+            params->m_currentMensur, params->m_currentMeterSig, true, params->m_notationType);
+        incrementScoreTime = incrementScoreTime / (DUR_MAX / DURATION_4);
         params->m_currentScoreTime += incrementScoreTime;
         params->m_currentRealTimeSeconds += incrementScoreTime * 60.0 / params->m_currentTempo;
     }
@@ -1287,10 +1315,12 @@ int LayerElement::CalcOnsetOffset(FunctorParams *functorParams)
         // If the note has a @dur or a @dur.ges, take it into account
         // This means that overwriting only @dots or @dots.ges will not be taken into account
         if (chord && !note->HasDur() && !note->HasDurGes()) {
-            incrementScoreTime = chord->GetAlignmentDuration();
+            incrementScoreTime = chord->GetAlignmentDuration(
+                params->m_currentMensur, params->m_currentMeterSig, true, params->m_notationType);
         }
         else {
-            incrementScoreTime = note->GetAlignmentDuration();
+            incrementScoreTime = note->GetAlignmentDuration(
+                params->m_currentMensur, params->m_currentMeterSig, true, params->m_notationType);
         }
         incrementScoreTime = incrementScoreTime / (DUR_MAX / DURATION_4);
         double realTimeIncrementSeconds = incrementScoreTime * 60.0 / params->m_currentTempo;
@@ -1314,7 +1344,9 @@ int LayerElement::CalcOnsetOffset(FunctorParams *functorParams)
         BeatRpt *rpt = dynamic_cast<BeatRpt *>(this);
         assert(rpt);
 
-        double incrementScoreTime = rpt->GetAlignmentDuration() / (DUR_MAX / DURATION_4);
+        incrementScoreTime = rpt->GetAlignmentDuration(
+            params->m_currentMensur, params->m_currentMeterSig, true, params->m_notationType);
+        incrementScoreTime = incrementScoreTime / (DUR_MAX / DURATION_4);
         rpt->SetScoreTimeOnset(params->m_currentScoreTime);
         params->m_currentScoreTime += incrementScoreTime;
         params->m_currentRealTimeSeconds += incrementScoreTime * 60.0 / params->m_currentTempo;

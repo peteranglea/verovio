@@ -2,9 +2,7 @@
 
 ## [Unreleased]
 ### Added
-* Additional options for controlling grace notes alignment
-* Support for `<instrDef>` (@rettinghaus)
-* Support for `mnum.visible` on `<scoreDef>` (@rettinghaus)
+* Support for `mnum.visible` on `<scoredef>` (@rettinghaus)
 * Implementation of `<mNum>` and generation from `measure@n` if necessary (@rettinghaus)
 * Support for mulitple lines or `<harm>` according to `@n` value
 * Adjustment of `<hairpin>` length with surrounding `<dynam>` or `<hairpin>`
